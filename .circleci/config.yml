@@ -1,0 +1,99 @@
+version: 2.1
+
+defaults: &defaults
+  working_directory: ~/repo
+  docker:
+    - image: circleci/node:10.12.0-stretch-browsers-legacy
+
+deploy_env: &deploy_env
+  working_directory: ~/repo
+  docker:
+    - image: google/cloud-sdk:217.0.0-alpine
+
+filter_only_master: &filter_only_master
+  filters:
+    branches:
+      only: master
+
+jobs:
+  setup:
+    <<: *defaults
+    steps:
+      - checkout
+      - restore_cache:
+          name: Restore Yarn Package Cache
+          keys:
+            - yarn-packages-{{ checksum "yarn.lock" }}
+      - run: yarn install
+      - run: yarn add --dev firebase-tools
+      - run: ln -s ./node_modules/.bin/firebase .
+      - save_cache:
+          name: Save Yarn Package Cache
+          key: yarn-packages-{{ checksum "yarn.lock" }}
+          paths:
+            - ~/.cache/yarn
+      - persist_to_workspace:
+          root: ~/repo
+          paths:
+            - ./*
+
+  # test:
+  #   <<: *defaults
+  #   steps:
+  #     - attach_workspace:
+  #         at: ~/repo
+  #     - run:
+  #         name: Run tests with JUnit as reporter
+  #         command: yarn test:coverage:ci
+  #         environment:
+  #           JEST_JUNIT_OUTPUT: 'reports/junit/js-test-results.xml'
+  #     - store_test_results:
+  #         path: reports/junit
+  #     - store_artifacts:
+  #         path: reports/junit
+
+  build:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/repo
+      - run: yarn generate:stg
+      - persist_to_workspace:
+          root: ~/repo
+          paths:
+            - dist
+
+  deploy:
+    <<: *deploy_env
+    steps:
+      - attach_workspace:
+          at: ~/repo
+      - checkout
+      - run: apk add --no-cache nodejs npm yarn
+      - run: yarn
+      - run: yarn build
+      - run: echo $GCLOUD_SERVICE_KEY > ${HOME}/gcloud-service-key.json
+      - run: gcloud auth activate-service-account --key-file=${HOME}/gcloud-service-key.json
+      - run: gcloud app deploy --quiet --project nuxt-gae-deploy
+      # - run: ./firebase use stg
+      # - run: ./firebase deploy --token "$FIREBASE_STG_TOKEN"
+
+workflows:
+  version: 2.1
+  test-deploy:
+    jobs:
+      - setup
+      # - test:
+      #     requires:
+      #       - setup
+      - build-stg:
+          <<: *filter_only_master
+          requires:
+            - setup
+            # - test
+      - deploy:
+          <<: *filter_only_master
+          requires:
+            - setup
+            # - test
+            - build
