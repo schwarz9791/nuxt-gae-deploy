@@ -1,0 +1,10 @@
+.gcloudignore
+.git
+.gitignore
+.editorconfig
+.circleci/
+.vscode/
+node_modules/
+/config
+/dist
+/test
