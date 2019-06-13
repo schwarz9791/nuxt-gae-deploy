@@ -57,11 +57,11 @@ jobs:
     steps:
       - attach_workspace:
           at: ~/repo
-      - run: yarn generate:stg
+      - run: yarn build
       - persist_to_workspace:
           root: ~/repo
           paths:
-            - dist
+            - .nuxt
 
   deploy:
     <<: *deploy_env
@@ -69,9 +69,6 @@ jobs:
       - attach_workspace:
           at: ~/repo
       - checkout
-      - run: apk add --no-cache nodejs npm yarn
-      - run: yarn
-      - run: yarn build
       - run: echo $GCLOUD_SERVICE_KEY > ${HOME}/gcloud-service-key.json
       - run: gcloud auth activate-service-account --key-file=${HOME}/gcloud-service-key.json
       - run: gcloud app deploy --quiet --project nuxt-gae-deploy
@@ -86,7 +83,7 @@ workflows:
       # - test:
       #     requires:
       #       - setup
-      - build-stg:
+      - build:
           <<: *filter_only_master
           requires:
             - setup
